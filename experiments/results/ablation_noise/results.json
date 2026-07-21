@@ -1,0 +1,82 @@
+[
+  {
+    "label": "gauss_0.05",
+    "noise_type": "gaussian",
+    "params": {
+      "sigma": 0.05
+    },
+    "final_loss": 0.05781010864302516,
+    "trustworthiness": 0.9777780721675499,
+    "continuity": 0.9928422491378586
+  },
+  {
+    "label": "gauss_0.2",
+    "noise_type": "gaussian",
+    "params": {
+      "sigma": 0.2
+    },
+    "final_loss": 0.0903503941372037,
+    "trustworthiness": 0.9774661662040541,
+    "continuity": 0.9947197619648415
+  },
+  {
+    "label": "gauss_0.5",
+    "noise_type": "gaussian",
+    "params": {
+      "sigma": 0.5
+    },
+    "final_loss": 0.23642130568623543,
+    "trustworthiness": 0.9754550845319203,
+    "continuity": 0.9901408024224073
+  },
+  {
+    "label": "mask_0.1",
+    "noise_type": "masking",
+    "params": {
+      "p": 0.1
+    },
+    "final_loss": 0.16650317795574665,
+    "trustworthiness": 0.9770978425435276,
+    "continuity": 0.9920957397594415
+  },
+  {
+    "label": "mask_0.3",
+    "noise_type": "masking",
+    "params": {
+      "p": 0.3
+    },
+    "final_loss": 0.38893407583236694,
+    "trustworthiness": 0.9498543822020356,
+    "continuity": 0.989489086550593
+  },
+  {
+    "label": "mask_0.5",
+    "noise_type": "masking",
+    "params": {
+      "p": 0.5
+    },
+    "final_loss": 0.5498928725719452,
+    "trustworthiness": 0.9357829295987888,
+    "continuity": 0.993379321221297
+  },
+  {
+    "label": "sp_0.1",
+    "noise_type": "salt_pepper",
+    "params": {
+      "p": 0.1
+    },
+    "final_loss": 0.27742937952280045,
+    "trustworthiness": 0.9636167886281437,
+    "continuity": 0.9870921229708134
+  },
+  {
+    "label": "sp_0.3",
+    "noise_type": "salt_pepper",
+    "params": {
+      "p": 0.3
+    },
+    "final_loss": 0.519284013658762,
+    "trustworthiness": 0.9529105265371351,
+    "continuity": 0.9886562158297586
+  }
+]

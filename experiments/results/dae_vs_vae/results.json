@@ -1,0 +1,14 @@
+{
+  "dae": {
+    "final_loss": 0.08335760980844498,
+    "trustworthiness": 0.9794907898057027,
+    "continuity": 0.9953722138110859,
+    "estimated_dim": 2
+  },
+  "vae": {
+    "final_loss": 1.0013928711414337,
+    "trustworthiness": 0.9022802800908403,
+    "continuity": 0.9883729918411978,
+    "estimated_dim": 2
+  }
+}
