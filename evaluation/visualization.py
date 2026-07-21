@@ -156,6 +156,49 @@ def plot_probabilistic_dim(
     plt.close()
 
 
+def plot_pca_dim(
+    explained_variance_ratio: np.ndarray,
+    cumulative_variance: np.ndarray,
+    dim_estimate: int,
+    threshold: float = 0.95,
+    title: str = "PCA Dimension Estimation",
+    save_path: str = None
+):
+    """
+    Plot the PCA scree plot (explained variance per component) and the
+    cumulative variance curve with the estimated dimension marked.
+    """
+    components = np.arange(1, len(explained_variance_ratio) + 1)
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4.5))
+
+    # Panel a: scree plot
+    ax1.plot(components, explained_variance_ratio, "o-", color="steelblue", markersize=6)
+    ax1.set_xlabel("Principal component")
+    ax1.set_ylabel("Explained variance ratio")
+    ax1.set_title("Scree Plot")
+    ax1.grid(True, alpha=0.3)
+
+    # Panel b: cumulative variance
+    ax2.plot(components, cumulative_variance, "o-", color="darkorange", markersize=6)
+    ax2.axhline(y=threshold, color="gray", linestyle=":", alpha=0.7,
+                label=f"Threshold = {threshold:.0%}")
+    ax2.axvline(x=dim_estimate, color="red", linestyle="--", alpha=0.5,
+                label=f"Estimated dim = {dim_estimate}")
+    ax2.set_xlabel("Number of components")
+    ax2.set_ylabel("Cumulative explained variance")
+    ax2.set_title("Cumulative Variance")
+    ax2.legend()
+    ax2.grid(True, alpha=0.3)
+
+    plt.suptitle(title, fontsize=13, y=1.02)
+    plt.tight_layout()
+    if save_path:
+        ensure_dir(os.path.dirname(save_path))
+        plt.savefig(save_path, dpi=150, bbox_inches="tight")
+    plt.close()
+
+
 def plot_dae_vs_vae_latent(
     z_dae: np.ndarray,
     z_vae: np.ndarray,
