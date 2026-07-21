@@ -1,0 +1,6 @@
+.idea/
+.venv/
+__pycache__/
+.ipynb_checkpoints/
+manifold-learning-dae/notebooks/data/
+manifold-learning-dae/notebooks/.ipynb_checkpoints/
