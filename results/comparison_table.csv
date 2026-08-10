@@ -1,0 +1,13 @@
+dataset,model,latent_dim,expected_dim,geo_prob_dim,mse,trustworthiness,continuity,jacobian_dim
+swiss_roll,linear_AE,2,2,2,0.2996,0.857,0.9919,2.0
+swiss_roll,nonlinear_AE,2,2,2,0.048,0.9798,0.9897,2.0
+swiss_roll,VAE,2,2,2,0.0642,0.9756,0.9883,2.0
+swiss_roll,DAE,2,2,2,0.0478,0.9805,0.9904,2.0
+linear,linear_AE,3,3,3,0.0,0.9995,0.9994,3.0
+linear,nonlinear_AE,3,3,3,0.0,0.9996,0.9994,3.0
+linear,VAE,3,3,3,0.002,0.9998,0.9998,3.0
+linear,DAE,3,3,3,0.0,0.9994,0.9991,3.0
+mnist,linear_AE,5,12,5,0.4718,0.9184,0.9716,5.0
+mnist,nonlinear_AE,5,12,5,0.1897,0.9831,0.9765,5.0
+mnist,VAE,5,12,5,0.1923,0.9825,0.9765,5.0
+mnist,DAE,5,12,5,0.2409,0.9809,0.9752,5.0

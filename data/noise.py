@@ -98,6 +98,42 @@ def get_noise_fn(noise_type: str, **kwargs):
     return lambda x: fn(x, **kwargs)
 
 
+def suggest_dae_sigma(X, k: int = 10, fraction: float = 0.1) -> float:
+    """
+    Provisional heuristic for the Gaussian corruption level of a DAE.
+
+    Returns a small fraction of the median distance to the k-th nearest
+    neighbour of the training data:
+
+        sigma ~= fraction * median_i( dist to k-th NN of x_i )
+
+    Rationale (provisional, see the notebook markdown): the corruption
+    should stay small relative to the local inter-point spacing so that
+    the noisy sample x_tilde remains within the "tube" around the manifold
+    that the denoiser must project back onto. The k-th NN distance is a
+    robust proxy for that local scale. This value is a PLACEHOLDER pending
+    a formal justification tied to the reach of the manifold, still being
+    developed in the methodology chapter of the thesis.
+
+    Args:
+        X:        Data array (N, D) — numpy array or tensor.
+        k:        Which neighbour to use for the local-scale estimate.
+        fraction: Fraction of the median k-th NN distance (e.g. 0.05-0.10).
+
+    Returns:
+        Suggested sigma (float).
+    """
+    import numpy as np
+    from sklearn.neighbors import NearestNeighbors
+
+    X = np.asarray(X, dtype=np.float64)
+    k = min(k, len(X) - 1)
+    nbrs = NearestNeighbors(n_neighbors=k + 1).fit(X)
+    dists, _ = nbrs.kneighbors(X)
+    median_kth = float(np.median(dists[:, k]))
+    return fraction * median_kth
+
+
 if __name__ == "__main__":
     x = torch.randn(5, 3)
     print("Original:\n", x)

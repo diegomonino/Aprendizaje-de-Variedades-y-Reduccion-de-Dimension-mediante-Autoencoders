@@ -95,6 +95,45 @@ class DAE(nn.Module):
         return {"z": z, "x_rec": x_rec}
 
 
+class LinearAE(nn.Module):
+    """
+    Linear Autoencoder (no nonlinearities).
+
+    A single linear map encodes R^input_dim -> R^latent_dim and a single
+    linear map decodes back. With an MSE objective the optimal solution
+    spans the same subspace as the top `latent_dim` principal components
+    (Baldi & Hornik, 1989), so this model is the natural bridge between
+    autoencoders and PCA used in Step 4. Biases are included so the model
+    can centre the data, matching PCA on mean-centred inputs.
+
+    Exposes the same encode/decode/forward dict contract as DAE, so it
+    plugs into the shared training loop and metrics unchanged.
+    """
+
+    def __init__(self, input_dim: int, latent_dim: int):
+        super().__init__()
+        self.input_dim = input_dim
+        self.latent_dim = latent_dim
+        self.encoder = nn.Linear(input_dim, latent_dim)
+        self.decoder = nn.Linear(latent_dim, input_dim)
+
+    def encode(self, x: torch.Tensor) -> torch.Tensor:
+        return self.encoder(x)
+
+    def decode(self, z: torch.Tensor) -> torch.Tensor:
+        return self.decoder(z)
+
+    def forward(self, x: torch.Tensor) -> dict:
+        z = self.encode(x)
+        x_rec = self.decode(z)
+        return {"z": z, "x_rec": x_rec}
+
+
+def build_linear_ae(input_dim: int, latent_dim: int = 2) -> LinearAE:
+    """Convenience builder for the linear autoencoder."""
+    return LinearAE(input_dim, latent_dim)
+
+
 def build_dae(input_dim: int, hidden_dims: List[int] = None, latent_dim: int = 2) -> DAE:
     """
     Convenience builder with sensible defaults.

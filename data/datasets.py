@@ -236,6 +236,52 @@ def get_dataloader(name: str, batch_size: int = 256, shuffle: bool = True, **kwa
     return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Unified metadata interface
+# ─────────────────────────────────────────────────────────────────────────────
+# The "expected intrinsic dimension" is the dimension the manifold hypothesis
+# predicts for each dataset. It is KNOWN exactly for the synthetic datasets
+# (by construction) and only APPROXIMATE for the real ones (from the
+# literature / our own Step-3 estimates). It is used as a reference against
+# which the Step-3 estimators and the Step-7 Jacobian estimate are compared;
+# the value actually used as the model latent dimension d is the one fixed in
+# Step 3, not this reference.
+_EXPECTED_INTRINSIC_DIM = {
+    "swiss_roll":  2,      # 2D sheet curved into R^3 (exact)
+    "linear":      None,   # equals intrinsic_dim kwarg (filled in below)
+    "mnist":       12,     # approximate, full 10-digit MNIST (literature ~12-14)
+    "mnist_digit": None,   # single digit, lower; left unspecified
+    "coil20":      None,   # ~1 per object (pure rotation); filled by its loader
+}
+
+
+def get_dataset_with_meta(name: str, **kwargs):
+    """
+    Unified loader returning both the dataset and a metadata dict, so every
+    dataset is consumed through the same interface downstream.
+
+    Returns:
+        (dataset, meta) where meta has keys:
+            'name'                   : dataset key
+            'ambient_dim'            : D (features live in R^D)
+            'n_samples'              : N actually loaded
+            'expected_intrinsic_dim' : reference intrinsic dim (int or None)
+    """
+    dataset = get_dataset(name, **kwargs)
+
+    expected = _EXPECTED_INTRINSIC_DIM.get(name)
+    if name == "linear":
+        expected = kwargs.get("intrinsic_dim", 3)
+
+    meta = {
+        "name": name,
+        "ambient_dim": int(dataset.data.shape[1]),
+        "n_samples": int(dataset.data.shape[0]),
+        "expected_intrinsic_dim": expected,
+    }
+    return dataset, meta
+
+
 if __name__ == "__main__":
     print("== Swiss Roll ==")
     sr = get_dataset("swiss_roll", n_samples=2000)

@@ -62,6 +62,51 @@ def vae_loss(x_clean: torch.Tensor, model_output: dict, beta: float = 1.0) -> di
     return {"loss": loss, "mse": mse, "kl": kl}
 
 
+def vae_loss_gamma(x_clean: torch.Tensor, model_output: dict,
+                   gamma: float = 1.0, beta: float = 1.0) -> dict:
+    """
+    VAE loss in the (gamma, beta) parameterisation used in the thesis:
+
+        L = alpha * E[ ||x - g(z)||^2 ] + beta * KL( q(z|x) || N(0, I) )
+
+    with alpha = 1 / (2 * gamma), gamma a FIXED (not learned) observation-
+    noise hyperparameter, and the KL in closed form
+
+        KL = 0.5 * sum_j ( sigma_j^2 + mu_j^2 - 1 - log sigma_j^2 ).
+
+    Difference from vae_loss: the reconstruction term is the expected
+    *squared L2 norm* per sample (sum over the D data dimensions, averaged
+    over the batch), not the elementwise mean, so alpha scales it exactly
+    as in the derivation of the ELBO for a Gaussian decoder with isotropic
+    variance gamma.
+
+    Args:
+        x_clean:      Target input, shape (N, D).
+        model_output: Dict with 'x_rec', 'mu', 'log_var'.
+        gamma:        Fixed decoder-variance hyperparameter (alpha = 1/2gamma).
+        beta:         KL weight (beta-VAE). Default 1.
+
+    Returns:
+        Dict with 'loss', 'recon' (E[||x-g(z)||^2]), 'kl', 'alpha'.
+    """
+    x_rec = model_output["x_rec"]
+    mu = model_output["mu"]
+    log_var = model_output["log_var"]
+
+    alpha = 1.0 / (2.0 * gamma)
+
+    # E[||x - g(z)||^2] : sum over data dims, mean over batch.
+    recon = torch.mean(torch.sum((x_rec - x_clean) ** 2, dim=1))
+
+    # KL closed form: 0.5 * sum(sigma^2 + mu^2 - 1 - log sigma^2), mean over batch.
+    kl = 0.5 * torch.mean(
+        torch.sum(log_var.exp() + mu.pow(2) - 1.0 - log_var, dim=1)
+    )
+
+    loss = alpha * recon + beta * kl
+    return {"loss": loss, "recon": recon, "kl": kl, "alpha": alpha}
+
+
 if __name__ == "__main__":
     # Quick test
     batch_size, input_dim, latent_dim = 16, 3, 2
