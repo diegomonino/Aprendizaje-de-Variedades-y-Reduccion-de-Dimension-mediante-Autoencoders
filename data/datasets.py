@@ -217,13 +217,98 @@ def make_mnist_digit_dataset(
     return NumpyDataset(data=X_np.astype(np.float32), labels=col_center)
 
 
+def _load_coil20_images(proc_dir: str):
+    """
+    Read every 'objX__Y.png' file in `proc_dir` (COIL-20 'coil-20-proc'
+    layout: 128x128 8-bit grayscale PNGs; X = object id 1-20, Y = rotation
+    angle in degrees, 5-degree steps -> 72 views/object, 1440 images total).
+
+    COIL-20 has no official torchvision/sklearn loader and is not
+    auto-downloadable from this environment, so it must be fetched by hand
+    from the official page and placed locally (not committed to git, same
+    convention as the MNIST cache under `data/raw/`).
+
+    Returns:
+        X       : (N, 128*128) float32 array, pixels scaled to [0, 1]
+        obj_id  : (N,) int array, object id (1-20)
+        angle   : (N,) int array, rotation angle in degrees (0-355)
+    """
+    import re
+    from PIL import Image
+
+    pattern = re.compile(r"obj(\d+)__(\d+)\.png$")
+    if not os.path.isdir(proc_dir):
+        files = []
+    else:
+        files = sorted(f for f in os.listdir(proc_dir) if pattern.match(f))
+    if not files:
+        raise FileNotFoundError(
+            f"No se encontraron imágenes 'objX__Y.png' en '{proc_dir}'. "
+            "COIL-20 no se descarga automáticamente: baja la versión "
+            "procesada ('coil-20-proc', 128x128, 1440 imágenes) desde "
+            "https://www.cs.columbia.edu/CAVE/software/softlib/coil-20.php "
+            f"y descomprímela en '{proc_dir}'."
+        )
+
+    imgs, obj_ids, angles = [], [], []
+    for fname in files:
+        obj_id, angle = map(int, pattern.match(fname).groups())
+        img = Image.open(os.path.join(proc_dir, fname)).convert("L")
+        imgs.append(np.asarray(img, dtype=np.float32).reshape(-1) / 255.0)
+        obj_ids.append(obj_id)
+        angles.append(angle)
+
+    return np.stack(imgs), np.array(obj_ids), np.array(angles)
+
+
+def make_coil20_dataset(
+    data_dir: str = "./data/raw",
+    proc_dirname: str = "coil-20-proc",
+) -> NumpyDataset:
+    """
+    Full COIL-20: 20 objects x 72 views = 1440 images, 128x128 grayscale
+    (ambient dim 16384). It is the union of 20 one-dimensional rotation
+    manifolds (one circle per object), so it has no single well-defined
+    intrinsic dimension (see `make_coil20_object_dataset` for that case).
+    `labels` holds the object id (1-20), for coloring/clustering by object.
+    """
+    proc_dir = os.path.join(data_dir, proc_dirname)
+    X, obj_ids, _angles = _load_coil20_images(proc_dir)
+    return NumpyDataset(data=X, labels=obj_ids)
+
+
+def make_coil20_object_dataset(
+    object_id: int = 1,
+    data_dir: str = "./data/raw",
+    proc_dirname: str = "coil-20-proc",
+) -> NumpyDataset:
+    """
+    Single COIL-20 object, all 72 rotations: a pure rotation manifold, i.e.
+    a 1D circle embedded in R^16384 -- known intrinsic dimension = 1.
+    `labels` holds the rotation angle (degrees), for coloring scatter plots
+    of the recovered latent space.
+    """
+    proc_dir = os.path.join(data_dir, proc_dirname)
+    X, obj_ids, angles = _load_coil20_images(proc_dir)
+    mask = obj_ids == object_id
+    if not mask.any():
+        raise ValueError(f"object_id={object_id} no encontrado en '{proc_dir}' (esperado 1-20).")
+    return NumpyDataset(data=X[mask], labels=angles[mask])
+
+
 def get_dataset(name: str, **kwargs) -> NumpyDataset:
-    """Unified entry point. name: 'swiss_roll', 'linear', 'mnist', or 'mnist_digit'."""
+    """
+    Unified entry point.
+    name: 'swiss_roll', 'linear', 'mnist', 'mnist_digit', 'coil20', or
+    'coil20_object'.
+    """
     registry = {
-        "swiss_roll":   make_swiss_roll_dataset,
-        "linear":       make_linear_manifold_dataset,
-        "mnist":        make_mnist_dataset,
-        "mnist_digit":  make_mnist_digit_dataset,
+        "swiss_roll":     make_swiss_roll_dataset,
+        "linear":         make_linear_manifold_dataset,
+        "mnist":          make_mnist_dataset,
+        "mnist_digit":    make_mnist_digit_dataset,
+        "coil20":         make_coil20_dataset,
+        "coil20_object":  make_coil20_object_dataset,
     }
     if name not in registry:
         raise ValueError(f"Unknown dataset '{name}'. Available: {list(registry.keys())}")
@@ -251,7 +336,8 @@ _EXPECTED_INTRINSIC_DIM = {
     "linear":      None,   # equals intrinsic_dim kwarg (filled in below)
     "mnist":       12,     # approximate, full 10-digit MNIST (literature ~12-14)
     "mnist_digit": None,   # single digit, lower; left unspecified
-    "coil20":      None,   # ~1 per object (pure rotation); filled by its loader
+    "coil20":       None,  # union of 20 rotation manifolds; no single d
+    "coil20_object": 1,    # single object = pure rotation manifold (exact)
 }
 
 
