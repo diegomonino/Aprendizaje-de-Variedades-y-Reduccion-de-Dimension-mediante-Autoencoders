@@ -26,8 +26,16 @@ Three families of metrics:
        dimension estimated *from the model itself* (used in Step 7 and
        compared against the data-driven estimates of Step 3).
 
-       Implemented with torch.func.jacrev + vmap for a batched, exact
-       Jacobian. autograd.functional.jacobian is provided as a fallback.
+       Implemented with torch.func.jacfwd + vmap for a batched, exact
+       Jacobian. Forward-mode is used deliberately: decoders map a LOW
+       latent dimension d to a HIGH ambient dimension D (d << D), and
+       jacfwd's cost scales with the input dimension d rather than the
+       output dimension D. jacrev (reverse-mode) would instead build an
+       internal (D, D)-sized cotangent basis per batch element -- fine for
+       small D (Swiss Roll, MNIST) but a memory blow-up for datasets with
+       large pixel-space D such as COIL-20 (D=16384: a single batch of 50
+       points needs 50*16384*16384*4 bytes =~ 53 GB with jacrev).
+       autograd.functional.jacobian is provided as a fallback.
 """
 
 import numpy as np
@@ -36,7 +44,7 @@ import torch
 from .topology import evaluate_topology
 
 try:
-    from torch.func import jacrev, vmap
+    from torch.func import jacfwd, vmap
     _HAS_TORCH_FUNC = True
 except Exception:  # pragma: no cover - old torch
     _HAS_TORCH_FUNC = False
@@ -77,7 +85,7 @@ def decoder_jacobian(decoder, z: torch.Tensor) -> torch.Tensor:
     if _HAS_TORCH_FUNC:
         def single(z_i):            # (d,) -> (D,)
             return decoder(z_i)
-        return vmap(jacrev(single))(z)      # (B, D, d)
+        return vmap(jacfwd(single))(z)      # (B, D, d)
 
     # Fallback: loop with autograd.functional.jacobian
     from torch.autograd.functional import jacobian
