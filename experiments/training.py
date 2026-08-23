@@ -23,6 +23,7 @@ import numpy as np
 import torch
 import torch.optim as optim
 from torch.utils.data import DataLoader
+from tqdm.auto import tqdm
 
 
 def set_seed(seed: int = 42):
@@ -53,6 +54,8 @@ def train_model(
     seed: int = 42,
     verbose: bool = True,
     log_every: int = 50,
+    progress_bar: bool = True,
+    desc: str = None,
 ) -> list:
     """
     Generic training loop for any model in this repo (AE, DAE, VAE).
@@ -70,8 +73,13 @@ def train_model(
         seed:       Seed for weight-independent stochasticity (shuffling,
                     noise, reparameterisation). Set here so the loop is
                     reproducible on its own.
-        verbose:    Print progress.
-        log_every:  Epoch interval between progress prints.
+        verbose:    Print progress (used only when progress_bar=False, e.g.
+                    non-interactive/script runs).
+        log_every:  Epoch interval between progress prints (verbose mode).
+        progress_bar: Show a live tqdm bar with the running loss instead of
+                    the periodic prints. Default on -- this is the mode used
+                    throughout the notebook.
+        desc:       Label shown on the progress bar (e.g. "swiss_roll · DAE").
 
     Returns:
         List of per-epoch average losses.
@@ -82,7 +90,9 @@ def train_model(
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
     losses = []
-    for epoch in range(1, epochs + 1):
+    epoch_iter = range(1, epochs + 1)
+    pbar = tqdm(epoch_iter, desc=desc or "training", leave=False) if progress_bar else epoch_iter
+    for epoch in pbar:
         model.train()
         epoch_loss = 0.0
         n_batches = 0
@@ -102,7 +112,9 @@ def train_model(
 
         avg = epoch_loss / n_batches
         losses.append(avg)
-        if verbose and (epoch % log_every == 0 or epoch == 1):
+        if progress_bar:
+            pbar.set_postfix(loss=f"{avg:.4f}")
+        elif verbose and (epoch % log_every == 0 or epoch == 1):
             print(f"    Epoch {epoch:4d}/{epochs} | Loss: {avg:.6f}")
 
     return losses
