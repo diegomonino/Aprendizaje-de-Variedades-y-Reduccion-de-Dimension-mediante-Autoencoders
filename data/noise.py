@@ -102,11 +102,6 @@ def suggest_dae_sigma(X, k: int = 10, fraction: float = 0.1) -> float:
     """
     Provisional heuristic for the Gaussian corruption level of a DAE.
 
-    Returns a small fraction of the median distance to the k-th nearest
-    neighbour of the training data:
-
-        sigma ~= fraction * median_i( dist to k-th NN of x_i )
-
     Rationale (provisional, see the notebook markdown): the corruption
     should stay small relative to the local inter-point spacing so that
     the noisy sample x_tilde remains within the "tube" around the manifold
@@ -115,23 +110,37 @@ def suggest_dae_sigma(X, k: int = 10, fraction: float = 0.1) -> float:
     a formal justification tied to the reach of the manifold, still being
     developed in the methodology chapter of the thesis.
 
+    UNITS. The target is a bound on the *norm* of the perturbation,
+
+        E[ ||sigma * eps|| ] ~= sigma * sqrt(D)  =  fraction * d_kNN,
+
+    but `corrupt_gaussian` takes sigma as the PER-COORDINATE standard
+    deviation, while the median k-th NN distance is a norm in R^D. Using
+    the raw distance as sigma therefore over-corrupts by a factor sqrt(D):
+    harmless in R^3 (1.7x) but a factor of 128 on COIL-20 (D=16384), where
+    it produced a per-pixel sigma of order 1 on data living in [0, 1] --
+    i.e. the DAE was trained on noise. Hence the 1/sqrt(D).
+
+        sigma = fraction * median_i( dist to k-th NN of x_i ) / sqrt(D)
+
     Args:
         X:        Data array (N, D) — numpy array or tensor.
         k:        Which neighbour to use for the local-scale estimate.
         fraction: Fraction of the median k-th NN distance (e.g. 0.05-0.10).
 
     Returns:
-        Suggested sigma (float).
+        Suggested per-coordinate sigma (float).
     """
     import numpy as np
     from sklearn.neighbors import NearestNeighbors
 
     X = np.asarray(X, dtype=np.float64)
+    D = X.shape[1]
     k = min(k, len(X) - 1)
     nbrs = NearestNeighbors(n_neighbors=k + 1).fit(X)
     dists, _ = nbrs.kneighbors(X)
     median_kth = float(np.median(dists[:, k]))
-    return fraction * median_kth
+    return fraction * median_kth / np.sqrt(D)
 
 
 if __name__ == "__main__":
