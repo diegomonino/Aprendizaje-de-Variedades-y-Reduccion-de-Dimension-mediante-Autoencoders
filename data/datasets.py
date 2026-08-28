@@ -14,6 +14,8 @@ Usage:
     dataset = get_dataset("mnist", n_samples=10000)
 """
 
+import warnings
+
 import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader
@@ -217,6 +219,9 @@ def make_mnist_digit_dataset(
     return NumpyDataset(data=X_np.astype(np.float32), labels=col_center)
 
 
+COIL20_VIEWS_PER_OBJECT = 72   # 0-355 grados en pasos de 5
+
+
 def _load_coil20_images(proc_dir: str):
     """
     Read every 'objX__Y.png' file in `proc_dir` (COIL-20 'coil-20-proc'
@@ -293,6 +298,20 @@ def make_coil20_object_dataset(
     mask = obj_ids == object_id
     if not mask.any():
         raise ValueError(f"object_id={object_id} no encontrado en '{proc_dir}' (esperado 1-20).")
+    # Integridad de la descarga: COIL-20-proc trae exactamente 72 vistas por
+    # objeto (0-355 grados en pasos de 5). Con N tan pequeño, una vista que
+    # falte deja un hueco en el lazo cerrado del giro y sesga las metricas de
+    # vecindad, asi que conviene avisar en vez de seguir en silencio.
+    n_views = int(mask.sum())
+    if n_views != COIL20_VIEWS_PER_OBJECT:
+        warnings.warn(
+            f"obj{object_id}: {n_views} vistas en '{proc_dir}', se esperaban "
+            f"{COIL20_VIEWS_PER_OBJECT}. Faltan angulos: "
+            f"{sorted(set(range(0, 360, 5)) - set(angles[mask].tolist()))}. "
+            "Revisa la descarga de coil-20-proc.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
     return NumpyDataset(data=X[mask], labels=angles[mask])
 
 

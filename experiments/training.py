@@ -19,6 +19,8 @@ against the clean target x (the denoising objective).
 """
 
 import random
+from collections import defaultdict
+
 import numpy as np
 import torch
 import torch.optim as optim
@@ -56,7 +58,8 @@ def train_model(
     log_every: int = 50,
     progress_bar: bool = True,
     desc: str = None,
-) -> list:
+    return_components: bool = False,
+):
     """
     Generic training loop for any model in this repo (AE, DAE, VAE).
 
@@ -80,9 +83,18 @@ def train_model(
                     the periodic prints. Default on -- this is the mode used
                     throughout the notebook.
         desc:       Label shown on the progress bar (e.g. "swiss_roll · DAE").
+        return_components: Also return the per-epoch average of every other
+                    scalar in the loss dict ('mse', 'recon', 'kl', ...).
+                    Needed for the VAE: its total loss is
+                    alpha * E[||x-g(z)||^2] + beta * KL, whose scale is not
+                    comparable with the plain per-element MSE the other
+                    models minimise, so the loss curves have to be drawn
+                    from the reconstruction term alone (divided by D).
 
     Returns:
-        List of per-epoch average losses.
+        List of per-epoch average losses, or the tuple (losses, history)
+        when return_components=True, with history a dict
+        {component_name: [per-epoch average]}.
     """
     set_seed(seed)
     model.to(device)
@@ -90,11 +102,13 @@ def train_model(
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
     losses = []
+    history = defaultdict(list)
     epoch_iter = range(1, epochs + 1)
     pbar = tqdm(epoch_iter, desc=desc or "training", leave=False) if progress_bar else epoch_iter
     for epoch in pbar:
         model.train()
         epoch_loss = 0.0
+        comp_sums = defaultdict(float)
         n_batches = 0
         for batch in loader:
             x_clean = batch.to(device)
@@ -108,15 +122,22 @@ def train_model(
             optimizer.step()
 
             epoch_loss += loss_dict["loss"].item()
+            for key, value in loss_dict.items():
+                if key != "loss" and torch.is_tensor(value) and value.ndim == 0:
+                    comp_sums[key] += value.item()
             n_batches += 1
 
         avg = epoch_loss / n_batches
         losses.append(avg)
+        for key, total in comp_sums.items():
+            history[key].append(total / n_batches)
         if progress_bar:
             pbar.set_postfix(loss=f"{avg:.4f}")
         elif verbose and (epoch % log_every == 0 or epoch == 1):
             print(f"    Epoch {epoch:4d}/{epochs} | Loss: {avg:.6f}")
 
+    if return_components:
+        return losses, dict(history)
     return losses
 
 

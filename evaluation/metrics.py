@@ -109,6 +109,21 @@ def effective_dimension_jacobian(
     count how many exceed `rel_threshold` times the largest singular value
     at that point. The mean count over points is the effective dimension.
 
+    Also returns a threshold-free companion, the participation ratio of
+    the eigenvalues lambda_i = s_i^2 of J^T J,
+
+        PR = (sum_i lambda_i)^2 / sum_i lambda_i^2,
+
+    averaged over points (same formula as `participation_ratio_dimension`
+    in dimension_estimation/pca.py). The counting estimate above saturates
+    at d whenever every singular value is within two orders of magnitude
+    of the largest one, which is the generic situation for a randomly
+    initialised MLP decoder: it can confirm that the decoder uses at most
+    d directions, but not that it uses fewer. PR is continuous and weights
+    the directions by how much they actually stretch, so it does drop
+    towards the true dimension when the latent space is over-sized (e.g.
+    d=5 on the COIL-20 rotation manifold, whose true dimension is 1).
+
     Args:
         decoder:       Decoder module (or model.decode), R^d -> R^D.
         z_points:      Latent points to probe, shape (B, d). Typically the
@@ -120,7 +135,10 @@ def effective_dimension_jacobian(
     Returns:
         Dict with:
             'effective_dim':   mean number of active singular values (float)
+            'participation_dim': mean participation ratio of the singular
+                               values (float, generally not an integer)
             'per_point_dim':   int array of shape (B,)
+            'per_point_pr':    float array of shape (B,)
             'singular_values': array (B, d) of singular values (descending)
             'rel_threshold':   echoed threshold
     """
@@ -133,9 +151,17 @@ def effective_dimension_jacobian(
     active = sv > (rel_threshold * top)                # boolean (B, d)
     per_point_dim = active.sum(axis=1).astype(int)
 
+    # Participation ratio on lambda = sv^2, per point.
+    lam = sv.astype(np.float64) ** 2
+    num = lam.sum(axis=1) ** 2
+    den = (lam ** 2).sum(axis=1)
+    per_point_pr = np.divide(num, den, out=np.zeros_like(num), where=den > 0)
+
     return {
         "effective_dim": float(per_point_dim.mean()),
+        "participation_dim": float(per_point_pr.mean()),
         "per_point_dim": per_point_dim,
+        "per_point_pr": per_point_pr,
         "singular_values": sv,
         "rel_threshold": rel_threshold,
     }
@@ -174,7 +200,9 @@ def evaluate_common_metrics(
         seed:            Seed for the Jacobian / topology subsamples.
 
     Returns:
-        Dict with 'mse', 'trustworthiness', 'continuity', 'jacobian_dim'.
+        Dict with 'mse', 'trustworthiness', 'continuity', 'jacobian_dim'
+        and 'jacobian_dim_pr' (the threshold-free participation-ratio
+        variant of the same estimate; see effective_dimension_jacobian).
     """
     X_t = torch.tensor(X_high, dtype=torch.float32)
     mse = reconstruction_mse(model, X_t, device=device)
@@ -200,6 +228,7 @@ def evaluate_common_metrics(
         "trustworthiness": topo["trustworthiness"],
         "continuity": topo["continuity"],
         "jacobian_dim": jac["effective_dim"],
+        "jacobian_dim_pr": jac["participation_dim"],
     }
 
 
@@ -213,7 +242,8 @@ if __name__ == "__main__":
     z = torch.randn(50, 2)
     jac = effective_dimension_jacobian(model.decode, z)
     print(f"Decoder R^2 -> R^3, effective dim (expect ~2): "
-          f"{jac['effective_dim']:.2f}")
+          f"{jac['effective_dim']:.2f}  (participation ratio: "
+          f"{jac['participation_dim']:.2f})")
     print(f"Jacobian batch shape: {decoder_jacobian(model.decode, z).shape}")
 
     X = torch.randn(200, 3)
