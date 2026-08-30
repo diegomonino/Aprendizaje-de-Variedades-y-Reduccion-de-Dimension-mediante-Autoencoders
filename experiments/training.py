@@ -8,6 +8,7 @@ experiment scripts:
 
     - set_seed:        deterministic seeding of python/numpy/torch
     - train_model:     generic training loop for AE / DAE / VAE
+    - train_model_timed: train_model + wall-clock cost of the run
     - get_latent:      extract latent codes for a full dataset
     - reconstruct:     decode a full dataset back to data space
 
@@ -19,6 +20,7 @@ against the clean target x (the denoising objective).
 """
 
 import random
+import time
 from collections import defaultdict
 
 import numpy as np
@@ -139,6 +141,34 @@ def train_model(
     if return_components:
         return losses, dict(history)
     return losses
+
+
+def train_model_timed(*args, **kwargs):
+    """
+    `train_model` plus the wall-clock cost of the run.
+
+    The computational-cost table of the thesis needs a training time per
+    (dataset, model, seed), and the only honest place to measure it is
+    around the whole loop -- weight init, mini-batching, forward/backward
+    and optimiser step included. Kept as a thin wrapper instead of a flag
+    inside `train_model` so the return type of the existing calls does not
+    change.
+
+    Note that it measures *elapsed* time, not CPU/GPU time: on a shared
+    machine it is only comparable between runs of the same session, which
+    is exactly the comparison the table makes (four models, same box).
+
+    Args:
+        *args, **kwargs: forwarded verbatim to `train_model`.
+
+    Returns:
+        Tuple (result, seconds), with `result` whatever `train_model`
+        returns -- the loss list, or the (losses, history) tuple when
+        return_components=True.
+    """
+    t0 = time.perf_counter()
+    result = train_model(*args, **kwargs)
+    return result, time.perf_counter() - t0
 
 
 @torch.no_grad()
