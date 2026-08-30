@@ -13,7 +13,10 @@ Diagnostic 1 — latent holes (latent_hole_probe)
     them, and measure how far the decoded points fall from the real data
     manifold (nearest-neighbour distance in data space). A large ratio of
     hole-distance to genuine-reconstruction-distance signals gaps where
-    the decoder generates implausible samples.
+    the decoder generates implausible samples. The denominator has a floor
+    relative to the dataset's own nearest-neighbour spacing: an almost
+    exact reconstruction drives it to zero and the ratio would diverge for
+    numerical reasons alone (see the caveat in the docstring).
 
 Diagnostic 2 — input sensitivity (noise_sensitivity)
     We perturb inputs with small Gaussian noise and measure (a) how much
@@ -47,6 +50,7 @@ def latent_hole_probe(
     mode: str = "interpolation",
     seed: int = 42,
     device: str = "cpu",
+    denom_floor_frac: float = 0.01,
 ) -> dict:
     """
     Decode latent points away from the training codes and measure how far
@@ -61,13 +65,43 @@ def latent_hole_probe(
                   'uniform' (uniform samples in the code bounding box).
         seed:     RNG seed.
         device:   'cpu' or 'cuda'.
+        denom_floor_frac: floor applied to the denominator of the ratio, as
+                  a fraction of the data's own nearest-neighbour spacing
+                  (see the caveat below). 0 disables the floor.
 
     Returns:
         Dict with:
             'hole_dist_mean' : mean NN distance (decoded holes -> data)
             'real_dist_mean' : mean NN distance (decoded real codes -> data)
-            'ratio'          : hole_dist_mean / real_dist_mean (>=1; large
-                               => decoder invents off-manifold points)
+            'ratio'          : hole_dist_mean / max(real_dist_mean, floor)
+                               (>=1; large => decoder invents off-manifold
+                               points)
+            'nn_spacing'     : median NN distance *within* X, the intrinsic
+                               distance scale of the dataset
+            'denom_floor'    : denom_floor_frac * nn_spacing
+            'denom_used'     : the denominator actually divided by
+            'ratio_saturated': True when real_dist_mean fell below the floor,
+                               i.e. the ratio is a lower bound, not a
+                               measurement
+
+    CAVEAT -- when the ratio stops meaning anything. The denominator is how
+    far the decoding of a GENUINE code lands from the data, so it goes to
+    zero as reconstruction becomes exact, and the ratio then diverges for
+    numerical reasons rather than because the decoder invented anything. It
+    is not a hypothetical: the linear AE on H_{3,30} reconstructs to ~1e-9
+    and gave ratios between 70 and 77192 across seeds, pure noise in the
+    denominator. The floor is expressed relative to the median
+    nearest-neighbour distance *inside* X because that is the resolution at
+    which "off the manifold" can still be distinguished from "next to
+    another sample": once a reconstruction is orders of magnitude closer to
+    the data than the samples are to each other, there is nothing left to
+    resolve. An absolute epsilon could not do this -- these datasets differ
+    by orders of magnitude in scale (variance per component 1 in the
+    normalised Swiss Roll, 0.0083 in H_{3,30}).
+
+    So: read `ratio` as a lower bound whenever `ratio_saturated` is True,
+    and prefer comparing `hole_dist_mean` directly against `nn_spacing` in
+    that case.
     """
     model.eval()
     model.to(device)
@@ -96,14 +130,28 @@ def latent_hole_probe(
     hole_dist, _ = nn.kneighbors(x_holes)
     real_dist, _ = nn.kneighbors(x_real)
 
+    # Intrinsic distance scale of the dataset: median distance from a sample
+    # to its nearest OTHER sample (kneighbors on the training set returns the
+    # point itself first, hence n_neighbors=2 and column 1).
+    self_dist, _ = nn.kneighbors(X, n_neighbors=min(2, len(X)))
+    nn_spacing = float(np.median(self_dist[:, -1])) if len(X) > 1 else 0.0
+
     hole_mean = float(hole_dist.mean())
     real_mean = float(real_dist.mean())
-    ratio = hole_mean / real_mean if real_mean > 1e-12 else float("inf")
+
+    floor = denom_floor_frac * nn_spacing
+    denom = max(real_mean, floor)
+    saturated = bool(real_mean < floor)
+    ratio = hole_mean / denom if denom > 0 else float("inf")
 
     return {
         "hole_dist_mean": hole_mean,
         "real_dist_mean": real_mean,
         "ratio": ratio,
+        "nn_spacing": nn_spacing,
+        "denom_floor": float(floor),
+        "denom_used": float(denom),
+        "ratio_saturated": saturated,
     }
 
 
